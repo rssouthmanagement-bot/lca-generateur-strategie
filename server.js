@@ -5,7 +5,7 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 
-function callClaude(apiKey, systemPrompt, userMessage, maxTokens = 8000) {
+function callClaude(apiKey, systemPrompt, userMessage, maxTokens = 8192) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       model: 'claude-sonnet-4-6',
