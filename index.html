@@ -163,7 +163,37 @@ label .required{color:var(--accent2);margin-left:2px;}
 let generatedHtml='',generatedFilename='';
 function getFormData(){return{nom_marque:document.getElementById('nom_marque').value.trim(),secteur:document.getElementById('secteur').value.trim(),ville:document.getElementById('ville').value.trim(),zone_km:document.getElementById('zone_km').value.trim(),formule:document.getElementById('formule').value,date_debut:document.getElementById('date_debut').value.trim(),ca_mensuel:document.getElementById('ca_mensuel').value.trim(),panier_moyen:document.getElementById('panier_moyen').value.trim(),budget_ads:document.getElementById('budget_ads').value.trim()||'300',offres:document.getElementById('offres').value.trim(),offre_hero:document.getElementById('offre_hero').value.trim(),differenciateur:document.getElementById('differenciateur').value.trim(),client_ideal:document.getElementById('client_ideal').value.trim(),probleme_resolu:document.getElementById('probleme_resolu').value.trim(),concurrents:document.getElementById('concurrents').value.trim(),forces_concurrents:document.getElementById('forces_concurrents').value.trim(),membres_camera:document.getElementById('membres_camera').value.trim(),materiel:document.getElementById('materiel').value.trim(),dates_eviter:document.getElementById('dates_eviter').value.trim(),dates_cles:document.getElementById('dates_cles').value.trim(),couleurs:document.getElementById('couleurs').value.trim(),ambiance_visuelle:document.getElementById('ambiance_visuelle').value.trim(),lieu_tournage:document.getElementById('lieu_tournage').value.trim()};}
 function validate(){const k=document.getElementById('apiKey').value.trim(),d=getFormData(),e=document.getElementById('apiError');if(!k||!k.startsWith('sk-ant-')){e.textContent='Clé API invalide';e.style.display='block';return false;}if(!d.nom_marque||!d.secteur||!d.ville||!d.ca_mensuel||!d.panier_moyen){e.textContent='Remplir les champs obligatoires (*)';e.style.display='block';return false;}e.style.display='none';return true;}
-async function startGeneration(){if(!validate())return;const apiKey=document.getElementById('apiKey').value.trim(),clientData=getFormData();document.getElementById('progressOverlay').classList.add('active');document.querySelector('.btn-generate').disabled=true;try{const r=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({apiKey,clientData})});const reader=r.body.getReader(),decoder=new TextDecoder();while(true){const{done,value}=await reader.read();if(done)break;const lines=decoder.decode(value).split('\n').filter(l=>l.startsWith('data: '));for(const line of lines){const data=JSON.parse(line.replace('data: ',''));if(data.error){document.getElementById('progressOverlay').classList.remove('active');document.getElementById('apiError').textContent='Erreur: '+data.error;document.getElementById('apiError').style.display='block';document.querySelector('.btn-generate').disabled=false;return;}if(data.step)updateProgress(data.step,data.total,data.label);if(data.done){generatedHtml=atob(data.html);generatedFilename=data.filename;document.getElementById('progressOverlay').classList.remove('active');document.getElementById('successSub').textContent=clientData.nom_marque+' — 15 slides générés';document.getElementById('successOverlay').classList.add('active');document.getElementById('downloadBtn').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([generatedHtml],{type:'text/html'}));a.download=generatedFilename;a.click();};}}};}catch(err){document.getElementById('progressOverlay').classList.remove('active');document.getElementById('apiError').textContent='Erreur: '+err.message;document.getElementById('apiError').style.display='block';document.querySelector('.btn-generate').disabled=false;}}
+async function startGeneration(){
+  if(!validate())return;
+  const apiKey=document.getElementById('apiKey').value.trim();
+  const clientData=getFormData();
+  document.getElementById('progressOverlay').classList.add('active');
+  document.querySelector('.btn-generate').disabled=true;
+  try{
+    const r=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({apiKey,clientData})});
+    const reader=r.body.getReader();
+    const decoder=new TextDecoder();
+    let buffer='';
+    while(true){
+      const{done,value}=await reader.read();
+      if(done)break;
+      buffer+=decoder.decode(value,{stream:true});
+      const parts=buffer.split('\n\n');
+      buffer=parts.pop();
+      for(const part of parts){
+        const line=part.trim();
+        if(!line.startsWith('data: '))continue;
+        try{
+          const data=JSON.parse(line.substring(6));
+          if(data.error){document.getElementById('progressOverlay').classList.remove('active');document.getElementById('apiError').textContent='Erreur: '+data.error;document.getElementById('apiError').style.display='block';document.querySelector('.btn-generate').disabled=false;return;}
+          if(data.step)updateProgress(data.step,data.total,data.label);
+          if(data.done){generatedHtml=atob(data.html);generatedFilename=data.filename;document.getElementById('progressOverlay').classList.remove('active');document.getElementById('successSub').textContent=clientData.nom_marque+' \u2014 15 slides g\u00e9n\u00e9r\u00e9s';document.getElementById('successOverlay').classList.add('active');document.getElementById('downloadBtn').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([generatedHtml],{type:'text/html'}));a.download=generatedFilename;a.click();};}
+        }catch(parseErr){console.warn('SSE parse skip:',parseErr.message);}
+      }
+    }
+    if(buffer.trim()){const line=buffer.trim();if(line.startsWith('data: ')){try{const data=JSON.parse(line.substring(6));if(data.done){generatedHtml=atob(data.html);generatedFilename=data.filename;document.getElementById('progressOverlay').classList.remove('active');document.getElementById('successSub').textContent=clientData.nom_marque+' \u2014 15 slides g\u00e9n\u00e9r\u00e9s';document.getElementById('successOverlay').classList.add('active');document.getElementById('downloadBtn').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([generatedHtml],{type:'text/html'}));a.download=generatedFilename;a.click();};}}catch(e){console.warn('Final SSE parse error:',e.message);}}}
+  }catch(err){document.getElementById('progressOverlay').classList.remove('active');document.getElementById('apiError').textContent='Erreur: '+err.message;document.getElementById('apiError').style.display='block';document.querySelector('.btn-generate').disabled=false;}
+}
 function updateProgress(step,total,label){for(let i=1;i<step;i++){const el=document.getElementById('step-'+i);if(el){el.classList.remove('active');el.classList.add('done');el.querySelector('.step-icon').textContent='✓';}}const c=document.getElementById('step-'+step);if(c){c.classList.add('active');c.querySelector('.step-icon').textContent='◉';}document.getElementById('progressBar').style.width=((step-1)/total*100)+'%';document.getElementById('progressSub').textContent=label;}
 function reset(){document.getElementById('successOverlay').classList.remove('active');document.querySelector('.btn-generate').disabled=false;generatedHtml='';generatedFilename='';}
 </script>
